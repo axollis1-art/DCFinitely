@@ -18,6 +18,7 @@ from src.valuation.workflow import (
     derive_forecast_defaults,
     derive_wacc_defaults,
 )
+from src.valuation.sensitivity import SensitivityTable, generate_sensitivity_table
 from src.visualisation.charts import ebit_margin_chart, revenue_chart, ufcf_chart, valuation_bridge_chart
 
 
@@ -38,7 +39,7 @@ def percentage_series_inputs(label: str, defaults: tuple[float, ...], key: str) 
                 f"Year {year}",
                 value=float(default * 100),
                 step=0.5,
-                format="%.1f%%",
+                format="%.1f",
                 key=f"{key}_{year}",
             )
             / 100
@@ -123,12 +124,12 @@ forecast_assumptions = ForecastAssumptions(
 st.sidebar.subheader("WACC assumptions")
 st.sidebar.caption("Risk-free rate, ERP, and debt cost are editable modelling assumptions, not live market data.")
 with st.sidebar.expander("WACC and capital structure", expanded=True):
-    risk_free_rate = st.number_input("Risk-free rate", value=wacc_defaults.risk_free_rate * 100, step=0.25, format="%.2f%%", key=f"{company.ticker}_rf") / 100
-    equity_risk_premium = st.number_input("Equity risk premium", value=wacc_defaults.equity_risk_premium * 100, step=0.25, format="%.2f%%", key=f"{company.ticker}_erp") / 100
+    risk_free_rate = st.number_input("Risk-free rate", value=wacc_defaults.risk_free_rate * 100, step=0.25, format="%.2f", key=f"{company.ticker}_rf") / 100
+    equity_risk_premium = st.number_input("Equity risk premium", value=wacc_defaults.equity_risk_premium * 100, step=0.25, format="%.2f", key=f"{company.ticker}_erp") / 100
     beta = st.number_input("Beta", value=wacc_defaults.beta, step=0.05, key=f"{company.ticker}_beta")
-    cost_of_debt = st.number_input("Pre-tax cost of debt", value=wacc_defaults.cost_of_debt * 100, step=0.25, format="%.2f%%", key=f"{company.ticker}_cod") / 100
-    wacc_tax_rate = st.number_input("WACC tax rate", value=wacc_defaults.tax_rate * 100, step=0.5, format="%.1f%%", key=f"{company.ticker}_wacc_tax") / 100
-    terminal_growth_rate = st.number_input("Terminal growth rate", value=wacc_defaults.terminal_growth_rate * 100, step=0.25, format="%.2f%%", key=f"{company.ticker}_terminal_growth") / 100
+    cost_of_debt = st.number_input("Pre-tax cost of debt", value=wacc_defaults.cost_of_debt * 100, step=0.25, format="%.2f", key=f"{company.ticker}_cod") / 100
+    wacc_tax_rate = st.number_input("WACC tax rate", value=wacc_defaults.tax_rate * 100, step=0.5, format="%.1f", key=f"{company.ticker}_wacc_tax") / 100
+    terminal_growth_rate = st.number_input("Terminal growth rate", value=wacc_defaults.terminal_growth_rate * 100, step=0.25, format="%.2f", key=f"{company.ticker}_terminal_growth") / 100
     market_value_equity = st.number_input("Market value of equity", value=wacc_defaults.market_value_equity, step=1_000_000.0, key=f"{company.ticker}_equity")
     market_value_debt = st.number_input("Market value of debt", value=wacc_defaults.market_value_debt, step=1_000_000.0, key=f"{company.ticker}_debt")
     cash = st.number_input("Cash", value=wacc_defaults.cash, step=1_000_000.0, key=f"{company.ticker}_cash")
@@ -201,4 +202,51 @@ valuation_metrics[3].metric("WACC", f"{result.wacc:.2%}")
 st.plotly_chart(valuation_bridge_chart(valuation), use_container_width=True)
 
 st.header("7. Sensitivity analysis")
-st.info("The interactive WACC × terminal-growth sensitivity grid and its validation rules are delivered in Issue #6.")
+st.caption("Each cell is an implied share price. The highlighted cell is the current base case.")
+with st.sidebar.expander("Sensitivity table settings", expanded=False):
+    sensitivity_wacc_range = st.number_input(
+        "WACC range around base case", value=1.0, step=0.25, format="%.2f", key=f"{company.ticker}_sensitivity_wacc_range"
+    ) / 100
+    sensitivity_wacc_step = st.number_input(
+        "WACC step", value=0.5, step=0.25, format="%.2f", key=f"{company.ticker}_sensitivity_wacc_step"
+    ) / 100
+    sensitivity_growth_range = st.number_input(
+        "Terminal-growth range around base case", value=0.5, step=0.25, format="%.2f", key=f"{company.ticker}_sensitivity_growth_range"
+    ) / 100
+    sensitivity_growth_step = st.number_input(
+        "Terminal-growth step", value=0.25, step=0.25, format="%.2f", key=f"{company.ticker}_sensitivity_growth_step"
+    ) / 100
+
+try:
+    sensitivity = generate_sensitivity_table(
+        forecast_ufcfs=[year.ufcf for year in result.forecast],
+        base_wacc=result.wacc,
+        base_terminal_growth_rate=terminal_growth_rate,
+        debt=market_value_debt,
+        cash=cash,
+        diluted_shares_outstanding=shares,
+        wacc_half_range=sensitivity_wacc_range,
+        wacc_step=sensitivity_wacc_step,
+        terminal_growth_half_range=sensitivity_growth_range,
+        terminal_growth_step=sensitivity_growth_step,
+    )
+except FinancialModelError as error:
+    st.warning(f"Sensitivity table unavailable: {error}")
+else:
+    sensitivity_frame = sensitivity.to_dataframe()
+    sensitivity_frame.index = [f"{rate:.2%}" for rate in sensitivity.wacc_rates]
+    sensitivity_frame.columns = [f"{rate:.2%}" for rate in sensitivity.terminal_growth_rates]
+
+    def style_sensitivity(data: pd.DataFrame) -> pd.DataFrame:
+        styles = pd.DataFrame("", index=data.index, columns=data.columns)
+        styles[data.isna()] = "background-color: #fee2e2; color: #991b1b"
+        styles.iloc[sensitivity.base_wacc_index, sensitivity.base_terminal_growth_index] = (
+            "background-color: #dcfce7; color: #166534; font-weight: bold"
+        )
+        return styles
+
+    st.dataframe(
+        sensitivity_frame.style.format("{:.2f}", na_rep="N/A").apply(style_sensitivity, axis=None),
+        use_container_width=True,
+    )
+    st.caption("N/A cells are invalid because WACC is less than or equal to terminal growth.")
