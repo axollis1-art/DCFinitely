@@ -12,8 +12,9 @@ from src.data.yfinance_provider import YFinanceProvider
 class FakeTicker:
     """A deterministic yfinance-compatible fixture."""
 
-    def __init__(self, *, raise_error: bool = False) -> None:
+    def __init__(self, *, raise_error: bool = False, compact_labels: bool = False) -> None:
         self.raise_error = raise_error
+        self.compact_labels = compact_labels
         self.periods = [pd.Timestamp("2024-12-31"), pd.Timestamp("2023-12-31")]
 
     def get_income_stmt(self, *, freq: str) -> pd.DataFrame:
@@ -24,7 +25,11 @@ class FakeTicker:
                 self.periods[0]: [120.0, 24.0, 5.0, 25.0],
                 self.periods[1]: [100.0, 20.0, 4.0, 20.0],
             },
-            index=["Total Revenue", "Operating Income", "Tax Provision", "Pretax Income"],
+            index=(
+                ["TotalRevenue", "OperatingIncome", "TaxProvision", "PretaxIncome"]
+                if self.compact_labels
+                else ["Total Revenue", "Operating Income", "Tax Provision", "Pretax Income"]
+            ),
         )
 
     def get_cashflow(self, *, freq: str) -> pd.DataFrame:
@@ -33,7 +38,11 @@ class FakeTicker:
                 self.periods[0]: [6.0, -8.0, -3.0],
                 self.periods[1]: [5.0, -7.0, -2.0],
             },
-            index=["Depreciation And Amortization", "Capital Expenditure", "Change In Working Capital"],
+            index=(
+                ["DepreciationAndAmortization", "CapitalExpenditure", "ChangeInWorkingCapital"]
+                if self.compact_labels
+                else ["Depreciation And Amortization", "Capital Expenditure", "Change In Working Capital"]
+            ),
         )
 
     def get_balance_sheet(self, *, freq: str) -> pd.DataFrame:
@@ -42,7 +51,11 @@ class FakeTicker:
                 self.periods[0]: [60.0, 30.0, 15.0, 40.0],
                 self.periods[1]: [50.0, 25.0, 12.0, 35.0],
             },
-            index=["Current Assets", "Current Liabilities", "Cash And Cash Equivalents", "Total Debt"],
+            index=(
+                ["CurrentAssets", "CurrentLiabilities", "CashAndCashEquivalents", "TotalDebt"]
+                if self.compact_labels
+                else ["Current Assets", "Current Liabilities", "Cash And Cash Equivalents", "Total Debt"]
+            ),
         )
 
     def get_info(self) -> dict[str, object]:
@@ -80,6 +93,19 @@ def test_provider_normalises_yfinance_statements() -> None:
     assert latest.change_in_nwc == 3.0
     assert latest.net_working_capital == 30.0
     assert result.historical_dataframe().shape == (2, 12)
+
+
+def test_provider_normalises_current_compact_yfinance_labels() -> None:
+    provider = YFinanceProvider(ticker_factory=lambda ticker: FakeTicker(compact_labels=True))
+
+    result = provider.get_company_financials("EXAMPLE")
+
+    latest = result.historical_financials[-1]
+    assert latest.revenue == 120.0
+    assert latest.operating_income == 24.0
+    assert latest.depreciation_and_amortisation == 6.0
+    assert latest.capex == 8.0
+    assert latest.net_working_capital == 30.0
 
 
 def test_provider_reports_missing_fields_for_manual_review() -> None:

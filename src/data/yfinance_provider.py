@@ -80,13 +80,18 @@ class YFinanceProvider:
             self._as_number(info.get("totalCash")),
             self._statement_value(
                 balance_sheet,
-                ("Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"),
+                (
+                    "Cash Cash Equivalents And Short Term Investments",
+                    "Cash And Cash Equivalents",
+                    "CashCashEquivalentsAndShortTermInvestments",
+                    "CashAndCashEquivalents",
+                ),
                 latest_balance_period,
             ) if latest_balance_period is not None else None,
         )
         total_debt = self._first_present(
             self._as_number(info.get("totalDebt")),
-            self._statement_value(balance_sheet, ("Total Debt",), latest_balance_period)
+            self._statement_value(balance_sheet, ("Total Debt", "TotalDebt"), latest_balance_period)
             if latest_balance_period is not None
             else None,
         )
@@ -138,28 +143,59 @@ class YFinanceProvider:
             period_end = self._to_date(period)
             if period_end is None:
                 continue
-            revenue = self._statement_value(income_statement, ("Total Revenue", "Operating Revenue"), period)
-            operating_income = self._statement_value(income_statement, ("Operating Income", "EBIT"), period)
-            tax_expense = self._absolute_value(
-                self._statement_value(income_statement, ("Tax Provision", "Tax Expense"), period)
+            revenue = self._statement_value(
+                income_statement,
+                ("Total Revenue", "Operating Revenue", "TotalRevenue", "OperatingRevenue"),
+                period,
             )
-            pretax_income = self._statement_value(income_statement, ("Pretax Income", "Pre Tax Income"), period)
+            operating_income = self._statement_value(
+                income_statement,
+                ("Operating Income", "EBIT", "OperatingIncome", "TotalOperatingIncomeAsReported"),
+                period,
+            )
+            tax_expense = self._absolute_value(
+                self._statement_value(income_statement, ("Tax Provision", "Tax Expense", "TaxProvision"), period)
+            )
+            pretax_income = self._statement_value(
+                income_statement, ("Pretax Income", "Pre Tax Income", "PretaxIncome"), period
+            )
             effective_tax_rate = (
                 tax_expense / abs(pretax_income)
                 if tax_expense is not None and pretax_income not in (None, 0)
                 else None
             )
             depreciation_and_amortisation = self._absolute_value(
-                self._statement_value(cash_flow, ("Depreciation And Amortization", "Depreciation And Amortisation", "Depreciation"), period)
+                self._statement_value(
+                    cash_flow,
+                    (
+                        "Depreciation And Amortization",
+                        "Depreciation And Amortisation",
+                        "Depreciation",
+                        "DepreciationAndAmortization",
+                        "DepreciationAmortizationDepletion",
+                    ),
+                    period,
+                )
             )
             capex = self._absolute_value(
-                self._statement_value(cash_flow, ("Capital Expenditure", "Capital Expenditures"), period)
+                self._statement_value(cash_flow, ("Capital Expenditure", "Capital Expenditures", "CapitalExpenditure"), period)
             )
             cash_flow_change_in_nwc = self._statement_value(
-                cash_flow, ("Change In Working Capital", "Change In Other Working Capital"), period
+                cash_flow,
+                (
+                    "Change In Working Capital",
+                    "Change In Other Working Capital",
+                    "ChangeInWorkingCapital",
+                    "ChangeInOtherWorkingCapital",
+                ),
+                period,
             )
-            current_assets = self._statement_value(balance_sheet, ("Current Assets", "Total Current Assets"), period)
-            current_liabilities = self._statement_value(balance_sheet, ("Current Liabilities", "Total Current Liabilities"), period)
+            current_assets = self._statement_value(
+                balance_sheet, ("Current Assets", "Total Current Assets", "CurrentAssets"), period
+            )
+            current_liabilities = self._statement_value(
+                balance_sheet, ("Current Liabilities", "Total Current Liabilities", "CurrentLiabilities"), period
+            )
             net_working_capital = (
                 current_assets - current_liabilities
                 if current_assets is not None and current_liabilities is not None
