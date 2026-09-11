@@ -31,3 +31,11 @@ pytest
 ```
 
 > This project is educational and does not constitute investment advice.
+
+## Data source
+
+The initial provider uses [yfinance](https://ranaroussi.github.io/yfinance/) to
+retrieve publicly available Yahoo Finance data without API keys. It is intended
+for educational and personal-use research; statement coverage, labels, and
+reporting periods can vary by company. The app identifies unavailable fields so
+they can be reviewed or overridden rather than silently guessed.
