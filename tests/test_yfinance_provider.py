@@ -57,6 +57,13 @@ class FakeTicker:
         }
 
 
+class EmptyIncomeTicker(FakeTicker):
+    """A ticker response with no annual statement, as returned for some symbols."""
+
+    def get_income_stmt(self, *, freq: str) -> pd.DataFrame:
+        return pd.DataFrame()
+
+
 def test_provider_normalises_yfinance_statements() -> None:
     provider = YFinanceProvider(ticker_factory=lambda ticker: FakeTicker())
 
@@ -90,10 +97,19 @@ def test_provider_reports_missing_fields_for_manual_review() -> None:
 
 
 def test_provider_rejects_malformed_ticker_before_network_access() -> None:
-    provider = YFinanceProvider(ticker_factory=lambda ticker: FakeTicker())
+    calls: list[str] = []
+    provider = YFinanceProvider(ticker_factory=lambda ticker: calls.append(ticker) or FakeTicker())
 
     with pytest.raises(InvalidTickerError, match="valid ticker"):
         provider.get_company_financials("not a ticker!")
+    assert calls == []
+
+
+def test_provider_treats_an_empty_income_statement_as_an_invalid_ticker() -> None:
+    provider = YFinanceProvider(ticker_factory=lambda ticker: EmptyIncomeTicker())
+
+    with pytest.raises(InvalidTickerError, match="No annual income statement"):
+        provider.get_company_financials("EMPTY")
 
 
 def test_provider_wraps_upstream_errors() -> None:

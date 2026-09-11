@@ -3,13 +3,19 @@
 import pytest
 
 from src.utils.validation import FinancialModelError
-from src.valuation.dcf import calculate_dcf_valuation, discount_factor, present_value_of_cash_flows
+from src.valuation.dcf import calculate_dcf_valuation, discount_factor, present_value, present_value_of_cash_flows
 from src.valuation.terminal_value import calculate_gordon_growth_terminal_value
 
 
 def test_discount_factor_and_present_value_of_cash_flows() -> None:
     assert discount_factor(0.10, 2) == pytest.approx(1 / 1.21)
+    assert present_value(121.0, 0.10, 2) == pytest.approx(100.0)
     assert present_value_of_cash_flows([100.0, 100.0], 0.10) == pytest.approx(173.553719)
+
+
+def test_discount_factor_rejects_a_non_future_period() -> None:
+    with pytest.raises(FinancialModelError, match="at least one"):
+        discount_factor(0.10, 0)
 
 
 def test_gordon_growth_terminal_value() -> None:
@@ -47,4 +53,17 @@ def test_calculate_dcf_valuation_rejects_zero_shares() -> None:
             debt=0.0,
             cash=0.0,
             diluted_shares_outstanding=0.0,
+        )
+
+
+@pytest.mark.parametrize("debt,cash", [(-1.0, 0.0), (0.0, -1.0)])
+def test_calculate_dcf_valuation_rejects_negative_balance_sheet_inputs(debt: float, cash: float) -> None:
+    with pytest.raises(FinancialModelError, match="cannot be negative"):
+        calculate_dcf_valuation(
+            forecast_ufcfs=[100.0],
+            wacc=0.10,
+            terminal_growth_rate=0.03,
+            debt=debt,
+            cash=cash,
+            diluted_shares_outstanding=10.0,
         )
